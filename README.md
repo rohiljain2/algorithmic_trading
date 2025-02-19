@@ -1,1 +1,1 @@
-# alogrithmic_trading
+# algorithmic_trading
