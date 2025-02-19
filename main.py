@@ -4,90 +4,141 @@ import yfinance as yf
 from datetime import datetime, timedelta
 from strategies.combined_strategy import CombinedStrategy
 import matplotlib.pyplot as plt
+import alpaca_trade_api as tradeapi
+import time
+import logging
+from typing import Dict, List
 
-def fetch_data(symbol='SPY', period='2y'):
-    """Fetch market data using yfinance"""
-    stock = yf.Ticker(symbol)
-    data = stock.history(period=period)
-    
-    # Standardize column names to lowercase
-    data.columns = data.columns.str.lower()
-    return data
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-def evaluate_strategy(strategy, data):
-    """Evaluate strategy performance and print metrics"""
-    metrics = strategy.get_strategy_metrics()
-    
-    print("\nStrategy Performance Metrics:")
-    print("=" * 50)
-    
-    for strategy_name, strategy_metrics in metrics.items():
-        print(f"\n{strategy_name.upper()} Strategy:")
-        print(f"Sharpe Ratio: {strategy_metrics['sharpe_ratio']:.2f}")
-        print(f"Max Drawdown: {strategy_metrics['max_drawdown']:.2%}")
-        print(f"Total Return: {strategy_metrics['total_return']:.2%}")
+# Alpaca API configuration
+ALPACA_API_KEY = 'PKO90THNEOJKDJJ40VJT'
+ALPACA_SECRET_KEY = 'zogV4TVElCrhagyabNJEhoOzQL8cuzhfOriPNWam'
+ALPACA_BASE_URL = 'https://paper-api.alpaca.markets'  # Paper trading URL
 
-def plot_performance(strategy, data):
-    """Plot strategy performance"""
-    plt.figure(figsize=(15, 10))
+api = tradeapi.REST(
+    ALPACA_API_KEY,
+    ALPACA_SECRET_KEY,
+    ALPACA_BASE_URL,
+    api_version='v2'
+)
+
+class TradingBot:
+    def __init__(self, symbols: List[str], weights: Dict[str, float], initial_capital: float = 100000):
+        self.symbols = symbols
+        self.weights = weights
+        self.initial_capital = initial_capital
+        self.strategies = {}
+        self.positions = {}
+        
+    def check_market_hours(self) -> bool:
+        """Check if the market is open"""
+        clock = api.get_clock()
+        return clock.is_open
     
-    # Plot portfolio value
-    plt.subplot(2, 1, 1)
-    portfolio_series = pd.Series(strategy.portfolio_value, index=data.index)
-    plt.plot(portfolio_series)
-    plt.title('Portfolio Value Over Time')
-    plt.grid(True)
+    def fetch_current_data(self, symbol: str) -> pd.DataFrame:
+        """Fetch recent market data for analysis"""
+        end = datetime.now()
+        start = end - timedelta(days=730)  # 2 years of data
+        data = api.get_bars(
+            symbol,
+            '1D',
+            start.strftime('%Y-%m-%d'),
+            end.strftime('%Y-%m-%d'),
+            adjustment='raw'
+        ).df
+        return data
     
-    # Plot asset price and signals
-    plt.subplot(2, 1, 2)
-    plt.plot(data.index, data['close'], label='Asset Price')
+    def execute_trade(self, symbol: str, quantity: int, side: str):
+        """Execute a trade through Alpaca"""
+        try:
+            api.submit_order(
+                symbol=symbol,
+                qty=quantity,
+                side=side,
+                type='market',
+                time_in_force='gtc'
+            )
+            logger.info(f"Executed {side} order for {quantity} shares of {symbol}")
+        except Exception as e:
+            logger.error(f"Error executing trade: {str(e)}")
     
-    # Plot buy and sell signals
-    signals = strategy.data['signal']
-    buy_signals = data[signals == 1].index
-    sell_signals = data[signals == -1].index
+    def update_positions(self):
+        """Update current positions"""
+        try:
+            positions = api.list_positions()
+            self.positions = {p.symbol: int(p.qty) for p in positions}
+        except Exception as e:
+            logger.error(f"Error updating positions: {str(e)}")
     
-    if len(buy_signals) > 0:
-        plt.plot(buy_signals, data.loc[buy_signals, 'close'], '^', 
-                markersize=10, color='g', label='Buy Signal')
-    if len(sell_signals) > 0:
-        plt.plot(sell_signals, data.loc[sell_signals, 'close'], 'v', 
-                markersize=10, color='r', label='Sell Signal')
-    
-    plt.title('Trading Signals')
-    plt.legend()
-    plt.grid(True)
-    
-    plt.tight_layout()
-    plt.show()
+    def run_trading_cycle(self):
+        """Run one complete trading cycle"""
+        for symbol in self.symbols:
+            try:
+                # Fetch current market data
+                data = self.fetch_current_data(symbol)
+                
+                # Initialize strategy if not exists
+                if symbol not in self.strategies:
+                    self.strategies[symbol] = CombinedStrategy(data, self.weights)
+                
+                # Update strategy with new data
+                self.strategies[symbol].update_data(data)
+                self.strategies[symbol].execute()
+                
+                # Get the latest signal
+                latest_signal = self.strategies[symbol].data['signal'].iloc[-1]
+                
+                # Update current positions
+                self.update_positions()
+                current_position = self.positions.get(symbol, 0)
+                
+                # Execute trades based on signals
+                if latest_signal == 1 and current_position == 0:  # Buy signal
+                    self.execute_trade(symbol, 100, 'buy')
+                elif latest_signal == -1 and current_position > 0:  # Sell signal
+                    self.execute_trade(symbol, current_position, 'sell')
+                
+            except Exception as e:
+                logger.error(f"Error in trading cycle for {symbol}: {str(e)}")
 
 def main():
-    try:
-        # Fetch market data
-        print("Fetching market data...")
-        data = fetch_data(symbol='SPY', period='2y')
-        
-        if data.empty:
-            raise ValueError("No data received from API")
-        
-        # Initialize and run combined strategy
-        print("Running combined strategy...")
-        weights = {
-            'ma_crossover': 0.4,
-            'mean_reversion': 0.3,
-            'trend_following': 0.3
-        }
-        
-        strategy = CombinedStrategy(data, weights=weights)
-        strategy.execute()
-        
-        # Evaluate and plot results
-        evaluate_strategy(strategy, data)
-        plot_performance(strategy, data)
-        
-    except Exception as e:
-        print(f"Error in main execution: {str(e)}")
-        raise
+    # Define trading parameters
+    symbols = ['AAPL', 'MSFT', 'GOOGL']  # Example symbols
+    weights = {
+        'ma_crossover': 0.4,
+        'mean_reversion': 0.3,
+        'trend_following': 0.3
+    }
+    
+    # Initialize trading bot
+    bot = TradingBot(symbols, weights)
+    
+    logger.info("Starting trading bot...")
+    
+    while True:
+        try:
+            # Check if market is open
+            if bot.check_market_hours():
+                logger.info("Market is open, running trading cycle...")
+                bot.run_trading_cycle()
+            else:
+                logger.info("Market is closed, waiting...")
+            
+            # Wait for 5 minutes before next cycle
+            time.sleep(300)
+            
+        except KeyboardInterrupt:
+            logger.info("Stopping trading bot...")
+            break
+        except Exception as e:
+            logger.error(f"Error in main loop: {str(e)}")
+            time.sleep(60)  # Wait a minute before retrying
 
 if __name__ == "__main__":
     main() 
