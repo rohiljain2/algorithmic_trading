@@ -73,4 +73,16 @@ class MeanReversion(BaseStrategy):
         strategy_returns = position_series.shift(1) * price_changes
         
         portfolio_value = self.initial_capital * (1 + strategy_returns).cumprod()
-        self.portfolio_value = portfolio_value.tolist() 
+        self.portfolio_value = portfolio_value.tolist()
+
+    def set_stop_loss(self, index):
+        # Logic to set stop loss based on the entry price
+        entry_price = self.data['close'].iloc[index]
+        stop_loss_price = entry_price * (1 - self.stop_loss)
+        # Store stop loss price for tracking
+
+    def set_take_profit(self, index):
+        # Logic to set take profit based on the entry price
+        entry_price = self.data['close'].iloc[index]
+        take_profit_price = entry_price * (1 + self.take_profit)
+        # Store take profit price for tracking 

@@ -35,6 +35,7 @@ class TradingBot:
         self.initial_capital = initial_capital
         self.strategies = {}
         self.positions = {}
+        self.backtest_results = {}
         
     def check_market_hours(self) -> bool:
         """Check if the market is open"""
@@ -106,10 +107,109 @@ class TradingBot:
                 
             except Exception as e:
                 logger.error(f"Error in trading cycle for {symbol}: {str(e)}")
+    
+    def backtest(self, start_date: str, end_date: str):
+        """
+        Backtest strategies on historical data
+        start_date, end_date format: 'YYYY-MM-DD'
+        """
+        logger.info(f"Starting backtest from {start_date} to {end_date}")
+        
+        for symbol in self.symbols:
+            try:
+                # Fetch historical data
+                data = api.get_bars(
+                    symbol,
+                    '1D',
+                    start_date,
+                    end_date,
+                    adjustment='raw'
+                ).df
+                
+                # Initialize strategy
+                strategy = CombinedStrategy(data, self.weights)
+                strategy.execute()
+                
+                # Calculate metrics
+                metrics = self._calculate_backtest_metrics(strategy, data)
+                self.backtest_results[symbol] = metrics
+                
+                # Plot results
+                self._plot_backtest_results(symbol, strategy, data)
+                
+                logger.info(f"Backtest results for {symbol}:")
+                logger.info(f"Total Return: {metrics['total_return']:.2%}")
+                logger.info(f"Sharpe Ratio: {metrics['sharpe_ratio']:.2f}")
+                logger.info(f"Max Drawdown: {metrics['max_drawdown']:.2%}")
+                
+            except Exception as e:
+                logger.error(f"Error in backtest for {symbol}: {str(e)}")
+    
+    def _calculate_backtest_metrics(self, strategy, data):
+        """Calculate performance metrics for backtest"""
+        # Convert portfolio_value list to pandas Series
+        portfolio_values = pd.Series(strategy.portfolio_value, index=data.index)
+        returns = portfolio_values.pct_change().dropna()
+        
+        total_return = (portfolio_values.iloc[-1] / portfolio_values.iloc[0]) - 1
+        sharpe_ratio = np.sqrt(252) * returns.mean() / returns.std()
+        
+        # Calculate max drawdown using Series methods
+        peak = portfolio_values.expanding(min_periods=1).max()
+        drawdown = (portfolio_values - peak) / peak
+        max_drawdown = drawdown.min()
+        
+        return {
+            'total_return': total_return,
+            'sharpe_ratio': sharpe_ratio,
+            'max_drawdown': max_drawdown,
+            'daily_returns': returns
+        }
+    
+    def _plot_backtest_results(self, symbol: str, strategy, data):
+        """Plot backtest results"""
+        plt.figure(figsize=(15, 12))
+        
+        # Plot portfolio value
+        plt.subplot(3, 1, 1)
+        plt.plot(strategy.portfolio_value, label='Portfolio Value')
+        plt.title(f'Backtest Results - {symbol}')
+        plt.legend()
+        plt.grid(True)
+        
+        # Plot asset price and signals
+        plt.subplot(3, 1, 2)
+        plt.plot(data.index, data['close'], label='Price')
+        signals = strategy.data['signal']
+        
+        # Plot buy signals
+        buy_signals = data[signals == 1].index
+        if len(buy_signals) > 0:
+            plt.plot(buy_signals, data.loc[buy_signals, 'close'], '^', 
+                    markersize=10, color='g', label='Buy Signal')
+        
+        # Plot sell signals
+        sell_signals = data[signals == -1].index
+        if len(sell_signals) > 0:
+            plt.plot(sell_signals, data.loc[sell_signals, 'close'], 'v', 
+                    markersize=10, color='r', label='Sell Signal')
+        
+        plt.legend()
+        plt.grid(True)
+        
+        # Plot daily returns
+        plt.subplot(3, 1, 3)
+        plt.plot(self.backtest_results[symbol]['daily_returns'], label='Daily Returns')
+        plt.title('Daily Returns')
+        plt.legend()
+        plt.grid(True)
+        
+        plt.tight_layout()
+        plt.show()
 
 def main():
     # Define trading parameters
-    symbols = ['AAPL', 'MSFT', 'GOOGL']  # Example symbols
+    symbols = ['AAPL', 'MSFT', 'GOOGL']
     weights = {
         'ma_crossover': 0.4,
         'mean_reversion': 0.3,
@@ -119,26 +219,48 @@ def main():
     # Initialize trading bot
     bot = TradingBot(symbols, weights)
     
-    logger.info("Starting trading bot...")
+    # Ask user for mode
+    mode = input("Select mode (1 for backtest, 2 for live trading): ")
     
-    while True:
-        try:
-            # Check if market is open
-            if bot.check_market_hours():
-                logger.info("Market is open, running trading cycle...")
-                bot.run_trading_cycle()
-            else:
-                logger.info("Market is closed, waiting...")
+    if mode == "1":
+        # Backtest mode
+        start_date = input("Enter start date (YYYY-MM-DD): ")
+        end_date = input("Enter end date (YYYY-MM-DD): ")
+        bot.backtest(start_date, end_date)
+        
+        # Allow user to adjust weights based on backtest results
+        adjust = input("Would you like to adjust strategy weights? (y/n): ")
+        if adjust.lower() == 'y':
+            print("Current weights:", weights)
+            weights['ma_crossover'] = float(input("Enter new MA Crossover weight (0-1): "))
+            weights['mean_reversion'] = float(input("Enter new Mean Reversion weight (0-1): "))
+            weights['trend_following'] = float(input("Enter new Trend Following weight (0-1): "))
             
-            # Wait for 5 minutes before next cycle
-            time.sleep(300)
+            # Normalize weights
+            total = sum(weights.values())
+            weights = {k: v/total for k, v in weights.items()}
             
-        except KeyboardInterrupt:
-            logger.info("Stopping trading bot...")
-            break
-        except Exception as e:
-            logger.error(f"Error in main loop: {str(e)}")
-            time.sleep(60)  # Wait a minute before retrying
+            # Run backtest again with new weights
+            bot = TradingBot(symbols, weights)
+            bot.backtest(start_date, end_date)
+    
+    elif mode == "2":
+        # Live trading mode
+        logger.info("Starting live trading bot...")
+        while True:
+            try:
+                if bot.check_market_hours():
+                    logger.info("Market is open, running trading cycle...")
+                    bot.run_trading_cycle()
+                else:
+                    logger.info("Market is closed, waiting...")
+                time.sleep(300)
+            except KeyboardInterrupt:
+                logger.info("Stopping trading bot...")
+                break
+            except Exception as e:
+                logger.error(f"Error in main loop: {str(e)}")
+                time.sleep(60)
 
 if __name__ == "__main__":
     main() 
