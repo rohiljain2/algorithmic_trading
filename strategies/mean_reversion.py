@@ -1,4 +1,5 @@
 from .base_strategy import BaseStrategy
+from .ml_model import StockPredictor
 import pandas as pd
 import numpy as np
 
@@ -9,33 +10,16 @@ class MeanReversion(BaseStrategy):
         self.entry_std = entry_std
         self.stop_loss = 0.02
         self.take_profit = 0.03
+        self.predictor = StockPredictor()
+        self.predictor.train(data)  # Train the model on initialization
         
     def execute(self):
         # Calculate mean and standard deviation
         self.data['mean'] = self.data['close'].rolling(window=self.mean_window).mean()
         self.data['std'] = self.data['close'].rolling(window=self.mean_window).std()
         
-        # Calculate z-score
-        self.data['z_score'] = (self.data['close'] - self.data['mean']) / self.data['std']
-        
-        # Calculate Bollinger Bands
-        self.data['upper_band'] = self.data['mean'] + (self.entry_std * self.data['std'])
-        self.data['lower_band'] = self.data['mean'] - (self.entry_std * self.data['std'])
-        
-        # Generate signals
-        self.data['signal'] = 0
-        
-        # Create conditions for signals
-        buy_condition = (self.data['close'] < self.data['lower_band'])
-        sell_condition = (self.data['close'] > self.data['upper_band'])
-        
-        # Apply signals
-        self.data.loc[buy_condition, 'signal'] = 1
-        self.data.loc[sell_condition, 'signal'] = -1
-        
-        # Apply volume filter
-        self.data['volume_ma'] = self.data['volume'].rolling(window=20).mean()
-        self.data.loc[self.data['volume'] < self.data['volume_ma'], 'signal'] = 0
+        # Generate signals using the machine learning model
+        self.data['signal'] = self.predictor.predict(self.data)
         
         # Apply risk management
         self.apply_risk_management()
