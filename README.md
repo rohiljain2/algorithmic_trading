@@ -1,62 +1,63 @@
-# Algorithmic Trading
+# Algorithmic Trading Bot
 
-This project implements a simple algorithmic trading system using various trading strategies. The system fetches market data, applies different trading strategies, and evaluates their performance.
+## Overview
+
+This project implements an algorithmic trading bot that scans the S&P 500 stocks to identify high-quality investment opportunities based on various technical indicators and machine learning models. The bot utilizes the Yahoo Finance API to fetch stock data and calculates key metrics to evaluate potential investments.
 
 ## Features
 
-- Fetch market data using Yahoo Finance
-- Implement multiple trading strategies:
-  - Moving Average Crossover
-  - Mean Reversion
-  - Trend Following
-  - Combined Strategy (weighted signals from individual strategies)
-- Calculate performance metrics (Sharpe Ratio, Max Drawdown, Total Return)
-- Visualize portfolio value and trading signals
+- Fetches current S&P 500 constituents.
+- Calculates advanced technical indicators (SMA, EMA, RSI, MACD, etc.).
+- Uses machine learning models to predict future stock performance.
+- Identifies top investment opportunities based on Sharpe ratio, trend strength, momentum, and volume analysis.
+- Outputs the top 5 investment opportunities with detailed metrics.
 
 ## Requirements
 
-- Python 3.x
-- pandas
-- numpy
-- yfinance
-- matplotlib
+- Python 3.7 or higher
+- Required Python packages:
+  - `pandas`
+  - `numpy`
+  - `yfinance`
+  - `scikit-learn`
+  - `matplotlib`
+  - `logging`
+
+You can install the required packages using pip:
 
 ## Installation
 
 1. Clone the repository:
+
    ```bash
    git clone https://github.com/yourusername/algorithmic_trading.git
    cd algorithmic_trading
    ```
 
-2. Install the required packages:
-   ```bash
-   pip install pandas numpy yfinance matplotlib
-   ```
+2. Install the required packages as mentioned above.
 
 ## Usage
 
-1. Open the `main.py` file and modify the parameters as needed (e.g., trading symbol, time period).
+1. Open a terminal and navigate to the project directory.
 2. Run the main script:
+
    ```bash
    python main.py
    ```
 
-3. The script will fetch market data, run the combined trading strategy, and display performance metrics along with visualizations of the portfolio value and trading signals.
+3. When prompted, select the mode:
+   - **1** for market scan: The bot will scan the S&P 500 for top investment opportunities.
+   - **2** for live trading: (This feature can be implemented in the future.)
 
-## Strategies
+## Output
 
-### Moving Average Crossover
-This strategy uses two moving averages (short-term and long-term) to generate buy and sell signals based on crossovers.
-
-### Mean Reversion
-This strategy assumes that asset prices will revert to their mean over time. It generates buy signals when prices are below the lower Bollinger Band and sell signals when prices are above the upper Bollinger Band.
-
-### Trend Following
-This strategy aims to capitalize on existing market trends. It generates buy signals when the price breaks above a recent high and sell signals when it breaks below a recent low.
-
-### Combined Strategy
-This strategy combines the signals from the individual strategies using specified weights to create a more robust trading signal.
+The bot will display the top 5 investment opportunities with the following metrics:
+- **Current Price**: The latest price of the stock.
+- **Monthly Return**: The percentage return over the last month.
+- **Sharpe Ratio**: A measure of risk-adjusted return.
+- **Trend Strength**: Indicates the strength of the current trend.
+- **Momentum (RSI)**: The Relative Strength Index value.
+- **Overall Score**: A composite score based on various metrics.
 
 ## Contributing
 
@@ -64,4 +65,9 @@ Contributions are welcome! If you have suggestions for improvements or new featu
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Thanks to the contributors of the libraries used in this project.
+- Special thanks to the Yahoo Finance API for providing stock data.
