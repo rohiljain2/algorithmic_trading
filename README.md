@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project implements an algorithmic trading bot that scans the S&P 500 stocks to identify high-quality investment opportunities based on various technical indicators and machine learning models. The bot utilizes the Yahoo Finance API to fetch stock data and calculates key metrics to evaluate potential investments.
+This project implements an algorithmic trading bot that scans the S&P 500 stocks to identify high-quality investment opportunities based on various technical indicators and machine learning models. The bot utilizes the Yahoo Finance API to fetch stock data and calculates key metrics to evaluate potential investments. Additionally, it employs Monte Carlo simulations to predict future stock price movements and assess risk.
 
 ## Features
 
@@ -10,7 +10,8 @@ This project implements an algorithmic trading bot that scans the S&P 500 stocks
 - Calculates advanced technical indicators (SMA, EMA, RSI, MACD, etc.).
 - Uses machine learning models to predict future stock performance.
 - Identifies top investment opportunities based on Sharpe ratio, trend strength, momentum, and volume analysis.
-- Outputs the top 5 investment opportunities with detailed metrics.
+- Performs Monte Carlo simulations to simulate potential future price paths.
+- Outputs the top 5 investment opportunities with detailed metrics and simulation results.
 
 ## Requirements
 
@@ -45,9 +46,7 @@ You can install the required packages using pip:
    python main.py
    ```
 
-3. When prompted, select the mode:
-   - **1** for market scan: The bot will scan the S&P 500 for top investment opportunities.
-   - **2** for live trading: (This feature can be implemented in the future.)
+3. The bot will automatically scan the S&P 500 for the top 5 investment opportunities and display the results, including Monte Carlo simulation metrics.
 
 ## Output
 
@@ -57,6 +56,10 @@ The bot will display the top 5 investment opportunities with the following metri
 - **Sharpe Ratio**: A measure of risk-adjusted return.
 - **Trend Strength**: Indicates the strength of the current trend.
 - **Momentum (RSI)**: The Relative Strength Index value.
+- **Expected Return (1Y)**: The expected return based on Monte Carlo simulations.
+- **Probability of Positive Return**: The likelihood of a positive return based on simulations.
+- **95% VaR**: The Value at Risk at the 95% confidence level.
+- **Max Drawdown Risk**: The maximum observed loss from a peak to a trough.
 - **Overall Score**: A composite score based on various metrics.
 
 ## Contributing
