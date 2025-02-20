@@ -192,12 +192,10 @@ def main():
                     
                     with col2:
                         # Key metrics in cards
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                         st.markdown(f'<div class="metric-label">Current Price</div>', unsafe_allow_html=True)
                         st.markdown(f'<div class="metric-value">${metrics["current_price"]:.2f}</div>', unsafe_allow_html=True)
                         st.markdown('</div>', unsafe_allow_html=True)
                         
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                         st.markdown(f'<div class="metric-label">Monthly Return</div>', unsafe_allow_html=True)
                         st.markdown(f'<div class="metric-value">{metrics["monthly_return"]:.1f}%</div>', unsafe_allow_html=True)
                         st.markdown('</div>', unsafe_allow_html=True)
@@ -212,19 +210,16 @@ def main():
                     # Additional metrics in columns with cards
                     mc1, mc2, mc3 = st.columns(3)
                     with mc1:
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                         st.markdown('<div class="metric-label">Expected Return (1Y)</div>', unsafe_allow_html=True)
                         st.markdown(f'<div class="metric-value">{metrics["expected_return"]*100:.1f}%</div>', unsafe_allow_html=True)
                         st.markdown('</div>', unsafe_allow_html=True)
                     
                     with mc2:
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                         st.markdown('<div class="metric-label">Probability of Positive Return</div>', unsafe_allow_html=True)
                         st.markdown(f'<div class="metric-value">{metrics["prob_positive"]*100:.1f}%</div>', unsafe_allow_html=True)
                         st.markdown('</div>', unsafe_allow_html=True)
                     
                     with mc3:
-                        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
                         st.markdown('<div class="metric-label">95% VaR</div>', unsafe_allow_html=True)
                         st.markdown(f'<div class="metric-value">{metrics["var_95"]*100:.1f}%</div>', unsafe_allow_html=True)
                         st.markdown('</div>', unsafe_allow_html=True)
