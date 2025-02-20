@@ -2,12 +2,13 @@ import pandas as pd
 import numpy as np
 from typing import List, Dict
 import yfinance as yf
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.preprocessing import StandardScaler
 import logging
-import time
 from datetime import datetime, timedelta
+import requests
+from .monte_carlo import MonteCarloSimulator
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,19 +22,17 @@ class StockScanner:
             max_depth=4,
             random_state=42
         )
+        self.monte_carlo = MonteCarloSimulator()
         
     def get_sp500_tickers(self) -> List[str]:
-        """Get a list of S&P 500 tickers"""
+        """Get all S&P 500 tickers"""
         try:
-            # Use a reliable list of major stocks
-            major_tickers = [
-                'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'BRK-B', 'LLY', 'V', 'TSM',
-                'JPM', 'XOM', 'AVGO', 'MA', 'PG', 'HD', 'CVX', 'ABBV', 'COST', 'MRK',
-                'ADBE', 'CSCO', 'ACN', 'MCD', 'CRM', 'BAC', 'NFLX', 'TMO', 'LIN', 'ORCL'
-            ]
-            return major_tickers
+            url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+            tables = pd.read_html(url)
+            sp500_table = tables[0]
+            return sp500_table['Symbol'].tolist()
         except Exception as e:
-            logger.error(f"Error getting tickers: {str(e)}")
+            logger.error(f"Error fetching S&P 500 tickers: {str(e)}")
             return []
 
     def calculate_technical_indicators(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -67,43 +66,30 @@ class StockScanner:
         rs = gain / loss
         return 100 - (100 / (1 + rs))
 
-    def get_stock_data(self, symbol: str) -> pd.DataFrame:
-        """Get stock data with error handling"""
+    def process_stock(self, symbol: str) -> Dict:
+        """Process individual stock data"""
         try:
             stock = yf.Ticker(symbol)
             end_date = datetime.now()
             start_date = end_date - timedelta(days=365)
             data = stock.history(start=start_date, end=end_date)
             
-            if len(data) < 200:  # Ensure we have enough data
+            if len(data) < 200:
                 return None
                 
-            return data
-        except Exception as e:
-            logger.error(f"Error fetching data for {symbol}: {str(e)}")
-            return None
-
-    def calculate_metrics(self, data: pd.DataFrame) -> Dict:
-        """Calculate key metrics for stock evaluation"""
-        try:
+            data = self.calculate_technical_indicators(data)
+            
             returns = data['Daily_Return'].dropna()
             
-            # Risk-adjusted returns
+            # Calculate metrics
             annualized_return = returns.mean() * 252
             annualized_vol = returns.std() * np.sqrt(252)
             sharpe_ratio = annualized_return / annualized_vol if annualized_vol != 0 else 0
-            
-            # Trend strength
-            price = data['Close']
-            trend_strength = (price.iloc[-1] / price.iloc[-20] - 1) * 100
-            
-            # Momentum
+            trend_strength = (data['Close'].iloc[-1] / data['Close'].iloc[-20] - 1) * 100
             momentum = data['RSI'].iloc[-1]
-            
-            # Volume strength
             volume_strength = data['Volume_Ratio'].iloc[-1]
             
-            return {
+            metrics = {
                 'sharpe_ratio': sharpe_ratio,
                 'trend_strength': trend_strength,
                 'momentum': momentum,
@@ -112,58 +98,57 @@ class StockScanner:
                 'monthly_return': (data['Close'].iloc[-1] / data['Close'].iloc[-20] - 1) * 100
             }
             
-        except Exception as e:
-            logger.error(f"Error calculating metrics: {str(e)}")
+            # Add Monte Carlo simulation
+            price_paths, mc_metrics = self.monte_carlo.simulate_prices(data)
+            
+            metrics.update({
+                'expected_return': mc_metrics['expected_return'],
+                'var_95': mc_metrics['var_95'],
+                'prob_positive': mc_metrics['prob_positive'],
+                'max_drawdown': mc_metrics['max_drawdown']
+            })
+            
+            # Update scoring to include Monte Carlo metrics
+            score = (
+                metrics['sharpe_ratio'] * 0.25 +
+                metrics['trend_strength'] * 0.20 +
+                (metrics['momentum'] / 100) * 0.15 +
+                metrics['volume_strength'] * 0.15 +
+                metrics['prob_positive'] * 0.15 +
+                (1 + metrics['expected_return']) * 0.10
+            )
+            
+            # Update filtering criteria
+            if (metrics['sharpe_ratio'] > 1.0 and
+                metrics['trend_strength'] > 0 and
+                metrics['momentum'] > 40 and
+                metrics['prob_positive'] > 0.55 and  # Added probability threshold
+                metrics['var_95'] > -0.2):  # Added VaR threshold
+                
+                return {
+                    'symbol': symbol,
+                    'metrics': metrics,
+                    'score': score,
+                    'price_paths': price_paths
+                }
+                
+        except Exception:
             return None
 
     def scan_stocks(self) -> List[Dict]:
-        """Scan stocks and identify top opportunities"""
-        opportunities = []
+        """Scan stocks and identify top opportunities using parallel processing"""
         tickers = self.get_sp500_tickers()
+        opportunities = []
         
-        for symbol in tickers:
-            try:
-                logger.info(f"Processing {symbol}...")
-                
-                # Get stock data
-                data = self.get_stock_data(symbol)
-                if data is None:
-                    continue
-                
-                # Calculate indicators
-                data = self.calculate_technical_indicators(data)
-                
-                # Calculate metrics
-                metrics = self.calculate_metrics(data)
-                if metrics is None:
-                    continue
-                
-                # Calculate opportunity score
-                score = (
-                    metrics['sharpe_ratio'] * 0.35 +
-                    metrics['trend_strength'] * 0.25 +
-                    (metrics['momentum'] / 100) * 0.20 +
-                    metrics['volume_strength'] * 0.20
-                )
-                
-                # Add to opportunities if meets criteria
-                if (metrics['sharpe_ratio'] > 1.0 and
-                    metrics['trend_strength'] > 0 and
-                    metrics['momentum'] > 40):
-                    
-                    opportunities.append({
-                        'symbol': symbol,
-                        'metrics': metrics,
-                        'score': score
-                    })
-                
-                time.sleep(1)  # Avoid rate limiting
-                
-            except Exception as e:
-                logger.error(f"Error processing {symbol}: {str(e)}")
-                continue
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            future_to_symbol = {executor.submit(self.process_stock, symbol): symbol 
+                              for symbol in tickers}
+            
+            for future in as_completed(future_to_symbol):
+                result = future.result()
+                if result is not None:
+                    opportunities.append(result)
         
         # Sort opportunities by score
         opportunities.sort(key=lambda x: x['score'], reverse=True)
-        
         return opportunities[:5]  # Return top 5 opportunities 
